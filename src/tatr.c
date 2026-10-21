@@ -711,11 +711,12 @@ bool id_run(Command *self, const char *program_name, int argc, char **argv)
     Path dir_path = {0};
     Path cwd_path = {0};
     Path rel_path = {0};
+    String_Builder sb_path = {0};
     if (!find_tasks_database(&dir_path))  return false;
     if (!get_current_dir_path(&cwd_path)) return false;
     path_relative(&rel_path, cwd_path, dir_path);
     if (!(rel_path.count == 1 && sv_eq(da_last(&rel_path), SVLIT("..")))) {
-        fprintf(stderr, "ERROR: You are not inside any task folder.\n");
+        fprintf(stderr, "ERROR: You must be inside of a specific task folder like %s/<HUID>/\n", path_render_cstr(&sb_path, rel_path));
         return false;
     }
     const char *huid = temp_sv_to_cstr(da_last(&cwd_path));
@@ -853,7 +854,7 @@ bool ref_run(Command *self, const char *program_name, int argc, char **argv)
 
     if (huid == NULL) {
         if (!(rel_path.count == 1 && sv_eq(da_last(&rel_path), SVLIT("..")))) {
-            fprintf(stderr, "ERROR: You are not inside any task folder. Pass the ID of a task as an argument to search for referers of that task.\n");
+            fprintf(stderr, "ERROR: You should be inside of a specific task folder like %s/<HUID>. Alternatively you can pass the <HUID> of the task as an argument to search for referers of that task.\n", path_render_cstr(&sb_path, rel_path));
             return false;
         }
         huid = temp_sv_to_cstr(da_last(&cwd_path));

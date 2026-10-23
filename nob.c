@@ -548,49 +548,6 @@ defer:
     return result;
 }
 
-bool append_git_hash_to_build_h(String_Builder *sb_build_h)
-{
-    bool result = true;
-
-    Cmd cmd = {0};
-    String_Builder git_status_sb = {0};
-
-    cmd_append(&cmd, "git");
-    cmd_append(&cmd, "status");
-    cmd_append(&cmd, "--porcelain");
-    if (!cmd_run(&cmd, .stdout_path = BUILD_FOLDER"git_status.txt")) {
-        nob_log(WARNING, "git hash will not be included in `tatr-version`");
-        return_defer(true);
-    }
-
-    if (!read_entire_file(BUILD_FOLDER"git_status.txt", &git_status_sb)) return_defer(false);
-    String_View git_status_sv = sv_trim(sb_to_sv(git_status_sb));
-
-    cmd_append(&cmd, "git");
-    cmd_append(&cmd, "rev-parse");
-    cmd_append(&cmd, "--short");
-    cmd_append(&cmd, "HEAD");
-    if (!cmd_run(&cmd, .stdout_path = BUILD_FOLDER"git_hash.txt")) {
-        nob_log(WARNING, "git hash will not be included in `tatr-version`");
-        return_defer(true);
-    }
-
-    sb_appendf(sb_build_h, "#define GIT_HASH \"");
-    if (!read_entire_file(BUILD_FOLDER"git_hash.txt", sb_build_h)) return_defer(false);
-    while (sb_build_h->count > 0 && isspace(da_last(sb_build_h))) {
-        UNUSED(da_pop(sb_build_h));
-    }
-    if (git_status_sv.count > 0) {
-        sb_append(sb_build_h, '+');
-    }
-    sb_appendf(sb_build_h, "\"\n");
-
-defer:
-    free(cmd.items);
-    free(git_status_sb.items);
-    return result;
-}
-
 bool make_build_h(Compiler compiler)
 {
     bool result = true;
@@ -599,11 +556,23 @@ bool make_build_h(Compiler compiler)
     String_Builder sb_build_h = {0};
     String_Builder sb_compiler_version_txt = {0};
     String_Builder sb_tasks_readme_md = {0};
+    String_Builder sb_git_hash = {0};
 
     sb_appendf(&sb_build_h, "#ifndef BUILD_H_\n");
     sb_appendf(&sb_build_h, "#define BUILD_H_\n");
 
-    if (!append_git_hash_to_build_h(&sb_build_h)) return_defer(false);
+    switch (sb_append_git_hash(&sb_git_hash, BUILD_FOLDER)) {
+    case GIT_HASH_OK:
+        sb_appendf(&sb_build_h, "#define GIT_HASH \"%"SB_Fmt2"\"\n", SB_Arg(sb_git_hash));
+        break;
+    case GIT_HASH_NO_GIT:
+        nob_log(WARNING, "git hash will not be included in `tatr-version`");
+        break;
+    case GIT_HASH_ERROR:
+        return_defer(false);
+    default:
+        UNREACHABLE("Git_Hash_Result");
+    }
 
     static_assert(__compiler_count == 4, "Amount of compilers have changed");
     switch (compiler) {
@@ -653,6 +622,7 @@ defer:
     free(sb_build_h.items);
     free(sb_compiler_version_txt.items);
     free(sb_tasks_readme_md.items);
+    free(sb_git_hash.items);
     return true;
 }
 
